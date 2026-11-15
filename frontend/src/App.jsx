@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import Sidebar from "./components/layout/Sidebar";
 import Topbar from "./components/layout/Topbar";
+
 import Dashboard from "./pages/Dashboard";
+import Projects from "./pages/Projects";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
-import { useState } from "react";
+import Tasks from "./pages/Tasks";
 
 const AppLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -28,26 +31,9 @@ const AppLayout = () => {
         <main className="mx-auto max-w-[1600px] px-4 pb-10 pt-6 sm:px-6 lg:px-9 lg:pt-8">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/projects" element={<Projects />} />
 
-            <Route
-              path="/projects"
-              element={
-                <PlaceholderPage
-                  title="Projects"
-                  description="Your team's projects will live here."
-                />
-              }
-            />
-
-            <Route
-              path="/tasks"
-              element={
-                <PlaceholderPage
-                  title="My tasks"
-                  description="A focused view of the work assigned to you."
-                />
-              }
-            />
+            <Route path="/tasks" element={<Tasks />} />
 
             <Route
               path="/team"
