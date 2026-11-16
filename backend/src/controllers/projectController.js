@@ -1,5 +1,6 @@
 const Project = require("../models/Project");
 const Task = require("../models/Task");
+const recordActivity = require("../utils/recordActivity");
 
 // @desc    Get all projects
 // @route   GET /api/projects
@@ -70,6 +71,15 @@ const createProject = async (req, res, next) => {
       color,
     });
 
+    await recordActivity({
+      action: "project-created",
+      description: `Created project "${project.name}"`,
+      entityType: "project",
+      entityId: project._id,
+      entityName: project.name,
+      project: project._id,
+    });
+
     res.status(201).json({
       success: true,
       message: "Project created successfully",
@@ -135,6 +145,18 @@ const updateProject = async (req, res, next) => {
       });
     }
 
+    await recordActivity({
+      action: "project-updated",
+      description: `Updated project "${project.name}"`,
+      entityType: "project",
+      entityId: project._id,
+      entityName: project.name,
+      project: project._id,
+      metadata: {
+        updatedFields: Object.keys(updates),
+      },
+    });
+
     res.status(200).json({
       success: true,
       message: "Project updated successfully",
@@ -161,7 +183,6 @@ const updateProject = async (req, res, next) => {
 
 // @desc    Delete a project
 // @route   DELETE /api/projects/:id
-
 const deleteProject = async (req, res, next) => {
   try {
     const project = await Project.findById(req.params.id);
@@ -173,11 +194,22 @@ const deleteProject = async (req, res, next) => {
       });
     }
 
+    const projectId = project._id;
+    const projectName = project.name;
+
     // Delete all tasks belonging to this project
-    await Task.deleteMany({ project: project._id });
+    await Task.deleteMany({ project: projectId });
 
     // Delete the project
     await project.deleteOne();
+
+    await recordActivity({
+      action: "project-deleted",
+      description: `Deleted project "${projectName}"`,
+      entityType: "project",
+      entityId: projectId,
+      entityName: projectName,
+    });
 
     res.status(200).json({
       success: true,

@@ -12,10 +12,9 @@ import ProjectCard from "../components/dashboard/ProjectCard";
 import TaskTable from "../components/dashboard/TaskTable";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
 
-import { activities } from "../data/mockData";
-
 import useProjects from "../hooks/useProjects";
 import useTasks from "../hooks/useTasks";
+import useActivities from "../hooks/useActivities";
 
 export default function Dashboard() {
   const {
@@ -25,6 +24,12 @@ export default function Dashboard() {
   } = useProjects();
 
   const { tasks, loading: tasksLoading, error: tasksError } = useTasks();
+
+  const {
+    activities,
+    loading: activitiesLoading,
+    error: activitiesError,
+  } = useActivities(5);
 
   const loading = projectsLoading || tasksLoading;
   const error = projectsError || tasksError;
@@ -191,7 +196,11 @@ export default function Dashboard() {
           <section className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.85fr)]">
             <TaskTable tasks={tasks.slice(0, 5)} />
 
-            <ActivityFeed activities={activities} />
+            <ActivityFeed
+              activities={activities}
+              loading={activitiesLoading}
+              error={activitiesError}
+            />
           </section>
 
           {/* Progress banner */}

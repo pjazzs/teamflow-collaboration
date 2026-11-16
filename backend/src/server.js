@@ -2,9 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 
-const healthRoutes = require("./routes/healthRoutes");
-const projectRoutes = require("./routes/projectRoutes");
-const taskRoutes = require("./routes/taskRoutes");
+const loadRoutes = require("./utils/loadRoutes");
+
 const connectDB = require("./config/db");
 
 dotenv.config();
@@ -32,9 +31,7 @@ app.get("/", (req, res) => {
 });
 
 // API routes
-app.use("/api/health", healthRoutes);
-app.use("/api/projects", projectRoutes);
-app.use("/api/tasks", taskRoutes);
+loadRoutes(app);
 
 // 404 handler
 app.use((req, res) => {

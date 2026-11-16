@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   CalendarDays,
   CheckCircle2,
@@ -340,9 +341,12 @@ export default function Tasks() {
                   >
                     <td className="px-5 py-4">
                       <div>
-                        <p className="text-xs font-semibold text-slate-700">
+                        <Link
+                          to={`/tasks/${task._id}`}
+                          className="text-xs font-semibold text-slate-700 transition hover:text-violet-600"
+                        >
                           {task.title}
-                        </p>
+                        </Link>
 
                         {task.description && (
                           <p className="mt-1 max-w-55 truncate text-[10px] text-slate-400">

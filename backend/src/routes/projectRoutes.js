@@ -8,7 +8,12 @@ const {
   deleteProject,
 } = require("../controllers/projectController");
 
+const { protect } = require("../middleware/authMiddleware");
+
 const router = express.Router();
+
+// Require authentication for every project endpoint
+router.use(protect);
 
 router.route("/").get(getProjects).post(createProject);
 

@@ -9,6 +9,7 @@ import Projects from "./pages/Projects";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
 import Tasks from "./pages/Tasks";
+import TaskDetails from "./pages/TaskDetails";
 
 const AppLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -32,6 +33,8 @@ const AppLayout = () => {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/projects" element={<Projects />} />
+
+            <Route path="/tasks/:taskId" element={<TaskDetails />} />
 
             <Route path="/tasks" element={<Tasks />} />
 

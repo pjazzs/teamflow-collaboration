@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Task = require("../models/Task");
 const Project = require("../models/Project");
+const recordActivity = require("../utils/recordActivity");
 
 // Validate MongoDB IDs
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -107,9 +108,9 @@ const createTask = async (req, res, next) => {
       });
     }
 
-    const projectExists = await Project.exists({ _id: projectId });
+    const project = await Project.findById(projectId);
 
-    if (!projectExists) {
+    if (!project) {
       return res.status(404).json({
         success: false,
         message: "Project not found",
@@ -123,6 +124,16 @@ const createTask = async (req, res, next) => {
       status,
       priority,
       dueDate: dueDate || null,
+    });
+
+    await recordActivity({
+      action: "task-created",
+      description: `Created task "${task.title}" in "${project.name}"`,
+      entityType: "task",
+      entityId: task._id,
+      entityName: task.title,
+      project: project._id,
+      task: task._id,
     });
 
     const populatedTask = await Task.findById(task._id).populate(
@@ -216,6 +227,19 @@ const updateTask = async (req, res, next) => {
       delete updates.projectId;
     }
 
+    // Retrieve the task's previous state
+    const existingTask = await Task.findById(req.params.id);
+
+    if (!existingTask) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    const previousStatus = existingTask.status;
+    const previousProjectId = existingTask.project;
+
     const task = await Task.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true,
@@ -227,6 +251,29 @@ const updateTask = async (req, res, next) => {
         message: "Task not found",
       });
     }
+
+    const isCompleted =
+      previousStatus !== "completed" && task.status === "completed";
+
+    const projectName = task.project?.name || "Unknown project";
+
+    await recordActivity({
+      action: isCompleted ? "task-completed" : "task-updated",
+      description: isCompleted
+        ? `Completed task "${task.title}"`
+        : `Updated task "${task.title}"`,
+      entityType: "task",
+      entityId: task._id,
+      entityName: task.title,
+      project: task.project?._id || previousProjectId,
+      task: task._id,
+      metadata: {
+        updatedFields: Object.keys(updates),
+        previousStatus,
+        currentStatus: task.status,
+        projectName,
+      },
+    });
 
     res.status(200).json({
       success: true,
@@ -256,7 +303,7 @@ const deleteTask = async (req, res, next) => {
       });
     }
 
-    const task = await Task.findByIdAndDelete(req.params.id);
+    const task = await Task.findById(req.params.id).populate("project", "name");
 
     if (!task) {
       return res.status(404).json({
@@ -264,6 +311,21 @@ const deleteTask = async (req, res, next) => {
         message: "Task not found",
       });
     }
+
+    const taskId = task._id;
+    const taskTitle = task.title;
+    const projectId = task.project?._id || task.project;
+
+    await task.deleteOne();
+
+    await recordActivity({
+      action: "task-deleted",
+      description: `Deleted task "${taskTitle}"`,
+      entityType: "task",
+      entityId: taskId,
+      entityName: taskTitle,
+      project: projectId,
+    });
 
     res.status(200).json({
       success: true,
