@@ -1,15 +1,19 @@
 import { useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 
 import Sidebar from "./components/layout/Sidebar";
 import Topbar from "./components/layout/Topbar";
 
+import ProtectedRoute from "./components/auth/ProtectedRoute";
+
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
-import PlaceholderPage from "./pages/PlaceholderPage";
-
 import Tasks from "./pages/Tasks";
 import TaskDetails from "./pages/TaskDetails";
+import Login from "./pages/auth/Login";
+import PlaceholderPage from "./pages/PlaceholderPage";
+import Register from "./pages/auth/Register";
+import PublicRoute from "./components/auth/PublicRoute";
 
 const AppLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -26,17 +30,18 @@ const AppLayout = () => {
         />
       )}
 
-      <div className="lg:pl-65">
+      <div className="min-w-0 w-full lg:pl-65">
         <Topbar onMenu={() => setMobileOpen(true)} />
 
-        <main className="mx-auto max-w-[1600px] px-4 pb-10 pt-6 sm:px-6 lg:px-9 lg:pt-8">
+        <main className="mx-auto w-full min-w-0 max-w-[1600px] overflow-x-hidden px-4 pb-10 pt-6 sm:px-6 lg:px-9 lg:pt-8">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+
             <Route path="/projects" element={<Projects />} />
 
-            <Route path="/tasks/:taskId" element={<TaskDetails />} />
-
             <Route path="/tasks" element={<Tasks />} />
+
+            <Route path="/tasks/:taskId" element={<TaskDetails />} />
 
             <Route
               path="/team"
@@ -67,8 +72,6 @@ const AppLayout = () => {
                 />
               }
             />
-
-            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>
@@ -76,6 +79,19 @@ const AppLayout = () => {
   );
 };
 
-export default function App() {
-  return <AppLayout />;
-}
+const App = () => {
+  return (
+    <Routes>
+      <Route element={<PublicRoute />}>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+      </Route>
+
+      <Route element={<ProtectedRoute />}>
+        <Route path="/*" element={<AppLayout />} />
+      </Route>
+    </Routes>
+  );
+};
+
+export default App;

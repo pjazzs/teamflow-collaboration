@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+
 import {
   CalendarDays,
   CheckCircle2,
@@ -70,6 +72,9 @@ export default function Tasks() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [pageError, setPageError] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const requestedCreate = searchParams.get("create") === "task";
 
   const loading = tasksLoading || projectsLoading;
   const error = pageError || tasksError || projectsError;
@@ -108,11 +113,11 @@ export default function Tasks() {
   const pendingCount = tasks.filter((task) => task.status === "todo").length;
 
   const openCreateForm = () => {
+    clearCreateRequest();
     setSelectedTask(null);
     setPageError("");
     setShowForm(true);
   };
-
   const openEditForm = (task) => {
     setSelectedTask(task);
     setPageError("");
@@ -124,6 +129,7 @@ export default function Tasks() {
 
     setShowForm(false);
     setSelectedTask(null);
+    clearCreateRequest();
   };
 
   const handleSubmit = async (taskData) => {
@@ -139,6 +145,7 @@ export default function Tasks() {
     if (result.success) {
       setShowForm(false);
       setSelectedTask(null);
+      clearCreateRequest();
     }
 
     return result;
@@ -168,6 +175,16 @@ export default function Tasks() {
     if (!result.success) {
       setPageError(result.error || "Unable to update task status.");
     }
+  };
+  const clearCreateRequest = () => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("create");
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   return (
@@ -466,7 +483,7 @@ export default function Tasks() {
       )}
 
       {/* Create/Edit modal */}
-      {showForm && (
+      {(showForm || (requestedCreate && projects.length > 0)) && (
         <TaskForm
           key={selectedTask?._id || "new-task"}
           task={selectedTask}

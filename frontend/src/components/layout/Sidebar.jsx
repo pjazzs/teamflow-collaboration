@@ -4,13 +4,15 @@ import {
   CheckSquare,
   ChevronDown,
   LayoutDashboard,
+  LogOut,
   Settings,
   Users,
   X,
   Zap,
 } from "lucide-react";
 
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import useAuth from "../../context/useAuth";
 
 const links = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
@@ -20,10 +22,28 @@ const links = [
   { to: "/activity", label: "Activity", icon: Activity },
 ];
 
+const getInitials = (name = "") => {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+};
+
 export default function Sidebar({ mobileOpen, onClose }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    onClose?.();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col border-r border-slate-200 bg-white px-5 py-6 transition-transform duration-200 lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-40 flex w-65 flex-col border-r border-slate-200 bg-white px-5 py-6 transition-transform duration-200 lg:translate-x-0 ${
         mobileOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >
@@ -55,14 +75,12 @@ export default function Sidebar({ mobileOpen, onClose }) {
       <div className="mt-9 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-600 text-xs font-bold text-white">
-            AC
+            TF
           </div>
 
           <div className="flex-1">
-            <p className="text-sm font-semibold text-slate-800">
-              Acme Creative
-            </p>
-            <p className="text-xs text-slate-500">Free workspace</p>
+            <p className="text-sm font-semibold text-slate-800">TeamFlow</p>
+            <p className="text-xs text-slate-500">Workspace</p>
           </div>
 
           <ChevronDown size={15} className="text-slate-400" />
@@ -125,14 +143,28 @@ export default function Sidebar({ mobileOpen, onClose }) {
         </NavLink>
 
         <div className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-800">
-            PO
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-800">
+            {getInitials(user?.name)}
           </div>
 
-          <div>
-            <p className="text-xs font-semibold text-slate-800">Progress O.</p>
-            <p className="text-[11px] text-slate-400">Workspace admin</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-slate-800">
+              {user?.name}
+            </p>
+            <p className="text-[11px] capitalize text-slate-400">
+              {user?.role || "Member"}
+            </p>
           </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            title="Sign out"
+            aria-label="Sign out"
+            className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+          >
+            <LogOut size={17} />
+          </button>
         </div>
       </div>
     </aside>
