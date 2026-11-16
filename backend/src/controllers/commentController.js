@@ -96,6 +96,7 @@ const createComment = async (req, res, next) => {
       entityName: task.title,
       project: task.project?._id || null,
       task: task._id,
+      actor: req.user._id,
       metadata: {
         commentId: comment._id,
         taskTitle: task.title,
@@ -170,6 +171,7 @@ const deleteComment = async (req, res, next) => {
       actorName: req.user.name,
       entityType: "comment",
       entityId: commentId,
+      actor: req.user._id,
       entityName: taskTitle,
       project: projectId,
       task: taskId,

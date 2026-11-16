@@ -25,6 +25,14 @@ const activitySchema = new mongoose.Schema(
       maxlength: [300, "Activity description cannot exceed 300 characters"],
     },
 
+    // Authenticated user who performed the action
+    actor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    // Name snapshot retained for historical records
     actorName: {
       type: String,
       trim: true,
@@ -73,6 +81,7 @@ const activitySchema = new mongoose.Schema(
 );
 
 activitySchema.index({ createdAt: -1 });
+activitySchema.index({ actor: 1, createdAt: -1 });
 activitySchema.index({ project: 1, createdAt: -1 });
 activitySchema.index({ task: 1, createdAt: -1 });
 

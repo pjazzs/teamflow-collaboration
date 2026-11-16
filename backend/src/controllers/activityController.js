@@ -47,12 +47,13 @@ const getActivities = async (req, res, next) => {
     }
 
     const activities = await Activity.find(filter)
+      .populate("actor", "name email")
       .populate("project", "name")
       .populate("task", "title")
       .sort({ createdAt: -1 })
       .limit(limit);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: activities.length,
       data: activities,

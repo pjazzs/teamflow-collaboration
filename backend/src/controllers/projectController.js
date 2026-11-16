@@ -78,6 +78,8 @@ const createProject = async (req, res, next) => {
       entityId: project._id,
       entityName: project.name,
       project: project._id,
+      actor: req.user._id,
+      actorName: req.user.name,
     });
 
     res.status(201).json({
@@ -154,6 +156,8 @@ const updateProject = async (req, res, next) => {
       project: project._id,
       metadata: {
         updatedFields: Object.keys(updates),
+        actor: req.user._id,
+        actorName: req.user.name,
       },
     });
 
@@ -209,6 +213,8 @@ const deleteProject = async (req, res, next) => {
       entityType: "project",
       entityId: projectId,
       entityName: projectName,
+      actor: req.user._id,
+      actorName: req.user.name,
     });
 
     res.status(200).json({
