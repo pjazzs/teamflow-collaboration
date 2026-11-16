@@ -75,7 +75,7 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="space-y-7">
+    <div className="w-full min-w-0 space-y-7">
       {/* Welcome section */}
       <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
@@ -112,7 +112,7 @@ export default function Dashboard() {
       {!loading && !error && (
         <>
           {/* Statistics */}
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="Total projects"
               value={projects.length}
@@ -169,7 +169,7 @@ export default function Dashboard() {
             </div>
 
             {projectCards.length > 0 ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {projectCards.slice(0, 3).map((project) => (
                   <ProjectCard key={project._id} project={project} />
                 ))}
@@ -193,14 +193,18 @@ export default function Dashboard() {
           </section>
 
           {/* Tasks and activity */}
-          <section className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.85fr)]">
-            <TaskTable tasks={tasks.slice(0, 5)} />
+          <section className="grid min-w-0 grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(0,0.85fr)]">
+            <div className="min-w-0">
+              <TaskTable tasks={tasks.slice(0, 5)} />
+            </div>
 
-            <ActivityFeed
-              activities={activities}
-              loading={activitiesLoading}
-              error={activitiesError}
-            />
+            <div className="min-w-0">
+              <ActivityFeed
+                activities={activities}
+                loading={activitiesLoading}
+                error={activitiesError}
+              />
+            </div>
           </section>
 
           {/* Progress banner */}

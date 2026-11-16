@@ -56,7 +56,7 @@ export default function Topbar({ onMenu }) {
 
       {/* Right section */}
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-        <label className="hidden h-10 w-56 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 lg:flex">
+        <label className="hidden h-10 w-56 shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 2xl:flex">
           <Search size={16} className="shrink-0 text-slate-400" />
 
           <input
