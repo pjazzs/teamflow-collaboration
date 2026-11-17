@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 // Route filename to API URL mapping
+
 const routePrefixes = {
   healthRoutes: "health",
   projectRoutes: "projects",
@@ -9,6 +10,7 @@ const routePrefixes = {
   commentRoutes: "comments",
   activityRoutes: "activities",
   authRoutes: "auth",
+  userRoutes: "users",
 };
 
 const loadRoutes = (app) => {

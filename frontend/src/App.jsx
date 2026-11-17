@@ -14,6 +14,7 @@ import Login from "./pages/auth/Login";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import Register from "./pages/auth/Register";
 import PublicRoute from "./components/auth/PublicRoute";
+import Team from "./pages/Team";
 
 const AppLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -43,15 +44,7 @@ const AppLayout = () => {
 
             <Route path="/tasks/:taskId" element={<TaskDetails />} />
 
-            <Route
-              path="/team"
-              element={
-                <PlaceholderPage
-                  title="Team members"
-                  description="Manage your workspace members."
-                />
-              }
-            />
+            <Route path="/team" element={<Team />} />
 
             <Route
               path="/activity"
