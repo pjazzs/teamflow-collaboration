@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { X, UserRound } from "lucide-react";
 
 const initialValues = {
   title: "",
   description: "",
   projectId: "",
+  assignedTo: "",
   status: "todo",
   priority: "medium",
   dueDate: "",
@@ -29,6 +30,7 @@ export default function TaskForm({
           title: task.title || "",
           description: task.description || "",
           projectId: task.project?._id || task.project || "",
+          assignedTo: task.assignedTo?._id || task.assignedTo || "",
           status: task.status || "todo",
           priority: task.priority || "medium",
           dueDate: toDateInput(task.dueDate),
@@ -38,13 +40,33 @@ export default function TaskForm({
 
   const [formError, setFormError] = useState("");
 
+  const selectedProject = useMemo(() => {
+    return projects.find((project) => project._id === formData.projectId);
+  }, [projects, formData.projectId]);
+
+  const availableMembers = useMemo(() => {
+    return (selectedProject?.members || []).filter(
+      (member) => member && typeof member === "object" && member._id,
+    );
+  }, [selectedProject]);
+
   const handleChange = (event) => {
     const { name, value } = event.target;
 
-    setFormData((current) => ({
-      ...current,
-      [name]: value,
-    }));
+    setFormData((current) => {
+      if (name === "projectId") {
+        return {
+          ...current,
+          projectId: value,
+          assignedTo: "",
+        };
+      }
+
+      return {
+        ...current,
+        [name]: value,
+      };
+    });
   };
 
   const handleSubmit = async (event) => {
@@ -56,8 +78,17 @@ export default function TaskForm({
       return;
     }
 
+    if (
+      formData.assignedTo &&
+      !availableMembers.some((member) => member._id === formData.assignedTo)
+    ) {
+      setFormError("The selected member does not belong to this project.");
+      return;
+    }
+
     const result = await onSubmit({
       ...formData,
+      assignedTo: formData.assignedTo || null,
       dueDate: formData.dueDate || null,
     });
 
@@ -89,8 +120,8 @@ export default function TaskForm({
 
             <p className="mt-1 text-xs text-slate-400">
               {task
-                ? "Update the task details."
-                : "Add a new task to one of your projects."}
+                ? "Update the task details and assignment."
+                : "Create a task and assign it to a project member."}
             </p>
           </div>
 
@@ -171,6 +202,50 @@ export default function TaskForm({
             {projects.length === 0 && (
               <p className="mt-2 text-[11px] text-amber-600">
                 You need to create a project before adding tasks.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label
+              className={`${labelClass} flex items-center gap-1.5`}
+              htmlFor="task-assignee"
+            >
+              <UserRound size={14} />
+              Assign to
+            </label>
+
+            <select
+              id="task-assignee"
+              name="assignedTo"
+              value={formData.assignedTo}
+              onChange={handleChange}
+              className={fieldClass}
+              disabled={!formData.projectId}
+            >
+              <option value="">Unassigned</option>
+
+              {availableMembers.map((member) => (
+                <option key={member._id} value={member._id}>
+                  {member.name}
+                  {member.email ? ` (${member.email})` : ""}
+                </option>
+              ))}
+            </select>
+
+            {!formData.projectId ? (
+              <p className="mt-2 text-[11px] text-slate-400">
+                Select a project to see available team members.
+              </p>
+            ) : availableMembers.length === 0 ? (
+              <p className="mt-2 text-[11px] text-amber-600">
+                No members are assigned to this project yet. Add members from
+                the Projects page.
+              </p>
+            ) : (
+              <p className="mt-2 text-[11px] text-slate-400">
+                {availableMembers.length} project member
+                {availableMembers.length !== 1 ? "s" : ""} available.
               </p>
             )}
           </div>

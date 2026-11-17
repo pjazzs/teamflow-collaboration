@@ -7,10 +7,15 @@ import {
   Plus,
   Search,
   Trash2,
+  Users,
+  UserPlus,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import useProjects from "../hooks/useProjects";
+import useAuth from "../context/useAuth";
 import ProjectForm from "../components/projects/ProjectForm";
+import ProjectMembersModal from "../components/projects/ProjectMembersModal";
 
 const statusStyles = {
   planning: "bg-violet-50 text-violet-700",
@@ -42,7 +47,18 @@ const formatDate = (date) => {
   });
 };
 
+const getInitials = (name = "") => {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+};
+
 export default function Projects() {
+  const { user: currentUser } = useAuth();
+
   const {
     projects,
     loading,
@@ -50,14 +66,20 @@ export default function Projects() {
     createProject,
     updateProject,
     deleteProject,
+    updateProjectMembers,
   } = useProjects();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [projectForMembers, setProjectForMembers] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [savingMembers, setSavingMembers] = useState(false);
   const [pageError, setPageError] = useState("");
+  const [pageSuccess, setPageSuccess] = useState("");
+
+  const isAdmin = currentUser?.role === "admin";
 
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
@@ -77,12 +99,14 @@ export default function Projects() {
   const openCreateForm = () => {
     setSelectedProject(null);
     setPageError("");
+    setPageSuccess("");
     setShowForm(true);
   };
 
   const openEditForm = (project) => {
     setSelectedProject(project);
     setPageError("");
+    setPageSuccess("");
     setShowForm(true);
   };
 
@@ -95,6 +119,7 @@ export default function Projects() {
   const handleSubmit = async (projectData) => {
     setSubmitting(true);
     setPageError("");
+    setPageSuccess("");
 
     const result = selectedProject
       ? await updateProject(selectedProject._id, projectData)
@@ -110,6 +135,38 @@ export default function Projects() {
     return result;
   };
 
+  const openMembersModal = (project) => {
+    setPageError("");
+    setPageSuccess("");
+    setProjectForMembers(project);
+  };
+
+  const closeMembersModal = () => {
+    if (savingMembers) return;
+    setProjectForMembers(null);
+  };
+
+  const handleSaveMembers = async (memberIds) => {
+    if (!projectForMembers || savingMembers) return;
+
+    setSavingMembers(true);
+    setPageError("");
+    setPageSuccess("");
+
+    const result = await updateProjectMembers(projectForMembers._id, memberIds);
+
+    setSavingMembers(false);
+
+    if (result.success) {
+      setProjectForMembers(null);
+      setPageSuccess(
+        `Team members for "${projectForMembers.name}" were updated successfully.`,
+      );
+    } else {
+      setPageError(result.error || "Unable to update project members.");
+    }
+  };
+
   const handleDelete = async (project) => {
     const confirmed = window.confirm(
       `Delete "${project.name}"? This will also permanently delete all tasks belonging to this project.`,
@@ -118,6 +175,7 @@ export default function Projects() {
     if (!confirmed) return;
 
     setPageError("");
+    setPageSuccess("");
 
     const result = await deleteProject(project._id);
 
@@ -194,6 +252,7 @@ export default function Projects() {
               size={17}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
             />
+
             <input
               type="search"
               value={search}
@@ -223,91 +282,164 @@ export default function Projects() {
         </div>
       )}
 
+      {pageSuccess && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {pageSuccess}
+        </div>
+      )}
+
       {loading ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
           Loading projects...
         </div>
       ) : filteredProjects.length > 0 ? (
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filteredProjects.map((project) => (
-            <article
-              key={project._id}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft transition hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="flex items-start justify-between">
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-xl"
-                  style={{
-                    backgroundColor: `${project.color || "#6366f1"}18`,
-                    color: project.color || "#6366f1",
-                  }}
-                >
-                  <BriefcaseBusiness size={19} />
+          {filteredProjects.map((project) => {
+            const members = project.members || [];
+
+            return (
+              <article
+                key={project._id}
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft transition hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <div className="flex items-start justify-between">
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-xl"
+                    style={{
+                      backgroundColor: `${project.color || "#6366f1"}18`,
+                      color: project.color || "#6366f1",
+                    }}
+                  >
+                    <BriefcaseBusiness size={19} />
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openEditForm(project)}
+                      aria-label={`Edit ${project.name}`}
+                      className="rounded-lg p-2 text-slate-400 transition hover:bg-violet-50 hover:text-violet-600"
+                    >
+                      <Edit3 size={16} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(project)}
+                      aria-label={`Delete ${project.name}`}
+                      className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => openEditForm(project)}
-                    aria-label={`Edit ${project.name}`}
-                    className="rounded-lg p-2 text-slate-400 transition hover:bg-violet-50 hover:text-violet-600"
-                  >
-                    <Edit3 size={16} />
-                  </button>
+                <div className="mt-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-sm font-bold text-slate-800">
+                      <Link
+                        to={`/projects/${project._id}`}
+                        className="transition-colors hover:text-violet-600"
+                      >
+                        {project.name}
+                      </Link>
+                    </h2>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(project)}
-                    aria-label={`Delete ${project.name}`}
-                    className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
+                    <span
+                      className={`rounded-md px-2 py-1 text-[9px] font-semibold ${
+                        statusStyles[project.status] || statusStyles.planning
+                      }`}
+                    >
+                      {formatLabel(project.status)}
+                    </span>
+                  </div>
 
-              <div className="mt-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-sm font-bold text-slate-800">
-                    {project.name}
-                  </h2>
-
-                  <span
-                    className={`rounded-md px-2 py-1 text-[9px] font-semibold ${
-                      statusStyles[project.status] || statusStyles.planning
-                    }`}
-                  >
-                    {formatLabel(project.status)}
-                  </span>
-                </div>
-
-                <p className="mt-2 min-h-10 text-xs leading-5 text-slate-500">
-                  {project.description || "No description provided."}
-                </p>
-              </div>
-
-              <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
-                <div>
-                  <p className="text-[10px] text-slate-400">Priority</p>
-                  <p
-                    className={`mt-1 text-xs font-semibold ${
-                      priorityStyles[project.priority] || "text-slate-500"
-                    }`}
-                  >
-                    {formatLabel(project.priority)}
+                  <p className="mt-2 min-h-10 text-xs leading-5 text-slate-500">
+                    {project.description || "No description provided."}
                   </p>
                 </div>
 
-                <div className="text-right">
-                  <p className="text-[10px] text-slate-400">Due date</p>
-                  <p className="mt-1 flex items-center justify-end gap-1 text-xs font-medium text-slate-600">
-                    <CalendarDays size={13} />
-                    {formatDate(project.dueDate)}
-                  </p>
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] font-medium text-slate-400">
+                        Project team
+                      </p>
+
+                      <div className="mt-2 flex items-center">
+                        {members.length > 0 ? (
+                          <div className="flex items-center -space-x-2">
+                            {members.slice(0, 4).map((member) => (
+                              <div
+                                key={member._id}
+                                title={`${member.name} (${member.role})`}
+                                className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-violet-100 text-[9px] font-bold text-violet-700"
+                              >
+                                {getInitials(member.name)}
+                              </div>
+                            ))}
+
+                            {members.length > 4 && (
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[9px] font-bold text-slate-600">
+                                +{members.length - 4}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">
+                            No members assigned
+                          </span>
+                        )}
+
+                        {members.length > 0 && (
+                          <span className="ml-2 text-[10px] text-slate-500">
+                            {members.length}{" "}
+                            {members.length === 1 ? "member" : "members"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => openMembersModal(project)}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-violet-200 px-2.5 py-2 text-[10px] font-semibold text-violet-700 transition hover:bg-violet-50"
+                      >
+                        {members.length > 0 ? (
+                          <Users size={13} />
+                        ) : (
+                          <UserPlus size={13} />
+                        )}
+                        Manage
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+
+                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
+                  <div>
+                    <p className="text-[10px] text-slate-400">Priority</p>
+                    <p
+                      className={`mt-1 text-xs font-semibold ${
+                        priorityStyles[project.priority] || "text-slate-500"
+                      }`}
+                    >
+                      {formatLabel(project.priority)}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-[10px] text-slate-400">Due date</p>
+                    <p className="mt-1 flex items-center justify-end gap-1 text-xs font-medium text-slate-600">
+                      <CalendarDays size={13} />
+                      {formatDate(project.dueDate)}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </section>
       ) : (
         <section className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
@@ -347,6 +479,15 @@ export default function Projects() {
           onClose={closeForm}
           onSubmit={handleSubmit}
           submitting={submitting}
+        />
+      )}
+
+      {projectForMembers && (
+        <ProjectMembersModal
+          project={projectForMembers}
+          onClose={closeMembersModal}
+          onSave={handleSaveMembers}
+          submitting={savingMembers}
         />
       )}
     </div>

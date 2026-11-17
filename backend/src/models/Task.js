@@ -22,6 +22,13 @@ const taskSchema = new mongoose.Schema(
       required: [true, "Task must belong to a project"],
     },
 
+    // Member assigned to this task
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
     status: {
       type: String,
       enum: ["todo", "in-progress", "review", "completed"],
@@ -47,5 +54,8 @@ const taskSchema = new mongoose.Schema(
 // Indexes for faster task filtering
 taskSchema.index({ project: 1, status: 1 });
 taskSchema.index({ project: 1, createdAt: -1 });
+
+// Faster lookup of tasks assigned to a member
+taskSchema.index({ assignedTo: 1, status: 1 });
 
 module.exports = mongoose.model("Task", taskSchema);

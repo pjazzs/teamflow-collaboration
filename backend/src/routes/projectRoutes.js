@@ -6,17 +6,32 @@ const {
   createProject,
   updateProject,
   deleteProject,
+  updateProjectMembers,
 } = require("../controllers/projectController");
 
-const { protect } = require("../middleware/authMiddleware");
+const { protect, authorizeRoles } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// Require authentication for every project endpoint
+// All project routes require authentication
 router.use(protect);
 
-router.route("/").get(getProjects).post(createProject);
+// Get accessible projects
+router.get("/", getProjects);
 
-router.route("/:id").get(getProject).patch(updateProject).delete(deleteProject);
+// Create project (admin only)
+router.post("/", authorizeRoles("admin"), createProject);
+
+// Manage project members (admin only)
+router.patch("/:id/members", authorizeRoles("admin"), updateProjectMembers);
+
+// Get a single accessible project
+router.get("/:id", getProject);
+
+// Update project (admin only)
+router.patch("/:id", authorizeRoles("admin"), updateProject);
+
+// Delete project (admin only)
+router.delete("/:id", authorizeRoles("admin"), deleteProject);
 
 module.exports = router;

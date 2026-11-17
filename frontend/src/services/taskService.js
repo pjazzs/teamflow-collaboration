@@ -24,6 +24,15 @@ const taskService = {
     return response.data;
   },
 
+  // Update task status (admin or assigned member)
+  updateTaskStatus: async (taskId, status) => {
+    const response = await api.patch(`/tasks/${taskId}/status`, {
+      status,
+    });
+
+    return response.data;
+  },
+
   deleteTask: async (taskId) => {
     const response = await api.delete(`/tasks/${taskId}`);
     return response.data;

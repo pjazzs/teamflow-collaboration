@@ -106,6 +106,26 @@ const useProjects = () => {
     }
   };
 
+  const updateProjectMembers = async (projectId, members) => {
+    try {
+      setError("");
+
+      const response = await projectService.updateProjectMembers(
+        projectId,
+        members,
+      );
+
+      await fetchProjects(false);
+
+      return { success: true, data: response.data };
+    } catch (err) {
+      const message = getApiErrorMessage(err);
+      setError(message);
+
+      return { success: false, error: message };
+    }
+  };
+
   return {
     projects,
     loading,
@@ -114,6 +134,7 @@ const useProjects = () => {
     createProject,
     updateProject,
     deleteProject,
+    updateProjectMembers,
   };
 };
 

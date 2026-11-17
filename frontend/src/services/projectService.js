@@ -21,6 +21,14 @@ const projectService = {
     return response.data;
   },
 
+  updateProjectMembers: async (projectId, members) => {
+    const response = await api.patch(`/projects/${projectId}/members`, {
+      members,
+    });
+
+    return response.data;
+  },
+
   deleteProject: async (projectId) => {
     const response = await api.delete(`/projects/${projectId}`);
     return response.data;

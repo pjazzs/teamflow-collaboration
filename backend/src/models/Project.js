@@ -42,6 +42,13 @@ const projectSchema = new mongoose.Schema(
       type: String,
       default: "#6366f1",
     },
+
+    members: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   {
     timestamps: true,

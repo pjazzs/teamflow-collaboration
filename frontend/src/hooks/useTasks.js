@@ -91,6 +91,30 @@ const useTasks = (projectId = null) => {
     }
   };
 
+  // Update status using the dedicated role-aware endpoint
+  const updateTaskStatus = async (taskId, status) => {
+    try {
+      setError("");
+
+      const response = await taskService.updateTaskStatus(taskId, status);
+
+      await fetchTasks(false);
+
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (err) {
+      const message = getApiErrorMessage(err);
+      setError(message);
+
+      return {
+        success: false,
+        error: message,
+      };
+    }
+  };
+
   const deleteTask = async (taskId) => {
     try {
       setError("");
@@ -114,6 +138,7 @@ const useTasks = (projectId = null) => {
     fetchTasks,
     createTask,
     updateTask,
+    updateTaskStatus,
     deleteTask,
   };
 };

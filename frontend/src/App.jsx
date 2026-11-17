@@ -15,6 +15,7 @@ import PlaceholderPage from "./pages/PlaceholderPage";
 import Register from "./pages/auth/Register";
 import PublicRoute from "./components/auth/PublicRoute";
 import Team from "./pages/Team";
+import ProjectDetails from "./pages/ProjectDetails";
 
 const AppLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -39,6 +40,7 @@ const AppLayout = () => {
             <Route path="/" element={<Dashboard />} />
 
             <Route path="/projects" element={<Projects />} />
+            <Route path="/projects/:projectId" element={<ProjectDetails />} />
 
             <Route path="/tasks" element={<Tasks />} />
 

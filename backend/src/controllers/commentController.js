@@ -5,7 +5,20 @@ const recordActivity = require("../utils/recordActivity");
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
-// @desc    Get all comments for a task
+// Find a task only when the user is authorized to access it.
+// Admins can access every task.
+// Members can access only tasks assigned to them.
+const findAccessibleTask = async (taskId, user) => {
+  const filter = { _id: taskId };
+
+  if (user.role !== "admin") {
+    filter.assignedTo = user._id;
+  }
+
+  return Task.findOne(filter).populate("project", "name");
+};
+
+// @desc    Get comments for an accessible task
 // @route   GET /api/comments/task/:taskId
 const getTaskComments = async (req, res, next) => {
   try {
@@ -18,16 +31,16 @@ const getTaskComments = async (req, res, next) => {
       });
     }
 
-    const taskExists = await Task.exists({ _id: taskId });
+    const task = await findAccessibleTask(taskId, req.user);
 
-    if (!taskExists) {
+    if (!task) {
       return res.status(404).json({
         success: false,
-        message: "Task not found",
+        message: "Task not found or access denied",
       });
     }
 
-    const comments = await Comment.find({ task: taskId })
+    const comments = await Comment.find({ task: task._id })
       .populate("author", "name")
       .sort({ createdAt: 1 });
 
@@ -41,14 +54,14 @@ const getTaskComments = async (req, res, next) => {
   }
 };
 
-// @desc    Create a comment for a task
+// @desc    Create a comment on an accessible task
 // @route   POST /api/comments/task/:taskId
 const createComment = async (req, res, next) => {
   try {
     const { taskId } = req.params;
     const { content } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(taskId)) {
+    if (!isValidId(taskId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid task ID",
@@ -69,12 +82,12 @@ const createComment = async (req, res, next) => {
       });
     }
 
-    const task = await Task.findById(taskId).populate("project", "name");
+    const task = await findAccessibleTask(taskId, req.user);
 
     if (!task) {
       return res.status(404).json({
         success: false,
-        message: "Task not found",
+        message: "Task not found or access denied",
       });
     }
 
@@ -127,7 +140,7 @@ const deleteComment = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!isValidId(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid comment ID",
@@ -143,6 +156,16 @@ const deleteComment = async (req, res, next) => {
       });
     }
 
+    // Verify task access before checking comment ownership.
+    const task = await findAccessibleTask(comment.task, req.user);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found or access denied",
+      });
+    }
+
     const isAuthor =
       comment.author && comment.author.toString() === req.user._id.toString();
 
@@ -155,13 +178,11 @@ const deleteComment = async (req, res, next) => {
       });
     }
 
-    const task = await Task.findById(comment.task).populate("project", "name");
-
     const commentId = comment._id;
-    const taskId = comment.task;
+    const taskId = task._id;
     const authorName = comment.authorName;
-    const projectId = task?.project?._id || null;
-    const taskTitle = task?.title || "Deleted task";
+    const projectId = task.project?._id || null;
+    const taskTitle = task.title;
 
     await comment.deleteOne();
 
@@ -171,14 +192,13 @@ const deleteComment = async (req, res, next) => {
       actorName: req.user.name,
       entityType: "comment",
       entityId: commentId,
-      actor: req.user._id,
       entityName: taskTitle,
       project: projectId,
       task: taskId,
       metadata: {
         commentAuthor: authorName,
         taskTitle,
-        projectName: task?.project?.name || "",
+        projectName: task.project?.name || "",
       },
     });
 

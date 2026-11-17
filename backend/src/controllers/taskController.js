@@ -1,16 +1,67 @@
 const mongoose = require("mongoose");
 const Task = require("../models/Task");
 const Project = require("../models/Project");
+const User = require("../models/User");
 const recordActivity = require("../utils/recordActivity");
 
-// Validate MongoDB IDs
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
-// @desc    Get all tasks, optionally filtered by project
+const populateTask = (query) =>
+  query
+    .populate("project", "name status color")
+    .populate("assignedTo", "name email role");
+
+// Validate that an assignee is an active member of the project
+const validateAssignee = async (assignedTo, project) => {
+  if (assignedTo === null || assignedTo === "") {
+    return { valid: true, userId: null };
+  }
+
+  if (typeof assignedTo !== "string" || !isValidId(assignedTo)) {
+    return {
+      valid: false,
+      status: 400,
+      message: "Invalid assigned member ID",
+    };
+  }
+
+  const user = await User.findOne({
+    _id: assignedTo,
+    isActive: true,
+  });
+
+  if (!user) {
+    return {
+      valid: false,
+      status: 400,
+      message: "Assigned member does not exist or is inactive",
+    };
+  }
+
+  const isProjectMember = project.members.some(
+    (memberId) => memberId.toString() === user._id.toString(),
+  );
+
+  if (!isProjectMember) {
+    return {
+      valid: false,
+      status: 400,
+      message: "Assigned member must belong to the selected project",
+    };
+  }
+
+  return { valid: true, userId: user._id };
+};
+
+// @desc    Get tasks accessible to the current user
 // @route   GET /api/tasks
 const getTasks = async (req, res, next) => {
   try {
     const filter = {};
+
+    if (req.user.role !== "admin") {
+      filter.assignedTo = req.user._id;
+    }
 
     if (req.query.projectId) {
       if (!isValidId(req.query.projectId)) {
@@ -20,23 +71,27 @@ const getTasks = async (req, res, next) => {
         });
       }
 
-      const projectExists = await Project.exists({
-        _id: req.query.projectId,
-      });
+      const projectFilter = { _id: req.query.projectId };
 
-      if (!projectExists) {
+      if (req.user.role !== "admin") {
+        projectFilter.members = req.user._id;
+      }
+
+      const project = await Project.findOne(projectFilter);
+
+      if (!project) {
         return res.status(404).json({
           success: false,
-          message: "Project not found",
+          message: "Project not found or access denied",
         });
       }
 
-      filter.project = req.query.projectId;
+      filter.project = project._id;
     }
 
-    const tasks = await Task.find(filter)
-      .populate("project", "name status color")
-      .sort({ createdAt: -1 });
+    const tasks = await populateTask(Task.find(filter)).sort({
+      createdAt: -1,
+    });
 
     res.status(200).json({
       success: true,
@@ -48,7 +103,7 @@ const getTasks = async (req, res, next) => {
   }
 };
 
-// @desc    Get a single task
+// @desc    Get a single accessible task
 // @route   GET /api/tasks/:id
 const getTask = async (req, res, next) => {
   try {
@@ -59,15 +114,18 @@ const getTask = async (req, res, next) => {
       });
     }
 
-    const task = await Task.findById(req.params.id).populate(
-      "project",
-      "name status color",
-    );
+    const filter = { _id: req.params.id };
+
+    if (req.user.role !== "admin") {
+      filter.assignedTo = req.user._id;
+    }
+
+    const task = await populateTask(Task.findOne(filter));
 
     if (!task) {
       return res.status(404).json({
         success: false,
-        message: "Task not found",
+        message: "Task not found or access denied",
       });
     }
 
@@ -80,31 +138,31 @@ const getTask = async (req, res, next) => {
   }
 };
 
-// @desc    Create a task
+// @desc    Create a task (admin only)
 // @route   POST /api/tasks
 const createTask = async (req, res, next) => {
   try {
-    const { title, description, projectId, status, priority, dueDate } =
-      req.body;
+    const {
+      title,
+      description,
+      projectId,
+      assignedTo,
+      status,
+      priority,
+      dueDate,
+    } = req.body;
 
-    if (!title || typeof title !== "string" || !title.trim()) {
+    if (typeof title !== "string" || !title.trim()) {
       return res.status(400).json({
         success: false,
         message: "Task title is required",
       });
     }
 
-    if (!projectId) {
+    if (!projectId || !isValidId(projectId)) {
       return res.status(400).json({
         success: false,
-        message: "Project ID is required",
-      });
-    }
-
-    if (!isValidId(projectId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid project ID",
+        message: "Valid project ID is required",
       });
     }
 
@@ -117,10 +175,26 @@ const createTask = async (req, res, next) => {
       });
     }
 
+    let assigneeId = null;
+
+    if (assignedTo !== undefined) {
+      const validation = await validateAssignee(assignedTo, project);
+
+      if (!validation.valid) {
+        return res.status(validation.status).json({
+          success: false,
+          message: validation.message,
+        });
+      }
+
+      assigneeId = validation.userId;
+    }
+
     const task = await Task.create({
-      title,
+      title: title.trim(),
       description,
-      project: projectId,
+      project: project._id,
+      assignedTo: assigneeId,
       status,
       priority,
       dueDate: dueDate || null,
@@ -136,12 +210,12 @@ const createTask = async (req, res, next) => {
       entityName: task.title,
       project: project._id,
       task: task._id,
+      metadata: {
+        assignedTo: assigneeId,
+      },
     });
 
-    const populatedTask = await Task.findById(task._id).populate(
-      "project",
-      "name status color",
-    );
+    const populatedTask = await populateTask(Task.findById(task._id));
 
     res.status(201).json({
       success: true,
@@ -160,7 +234,7 @@ const createTask = async (req, res, next) => {
   }
 };
 
-// @desc    Update a task
+// @desc    Update a task (admin only)
 // @route   PATCH /api/tasks/:id
 const updateTask = async (req, res, next) => {
   try {
@@ -171,6 +245,15 @@ const updateTask = async (req, res, next) => {
       });
     }
 
+    const existingTask = await Task.findById(req.params.id);
+
+    if (!existingTask) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
     const allowedFields = [
       "title",
       "description",
@@ -178,6 +261,7 @@ const updateTask = async (req, res, next) => {
       "priority",
       "dueDate",
       "projectId",
+      "assignedTo",
     ];
 
     const updates = {};
@@ -206,58 +290,64 @@ const updateTask = async (req, res, next) => {
       updates.title = updates.title.trim();
     }
 
-    if (updates.projectId) {
-      if (!isValidId(updates.projectId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid project ID",
-        });
-      }
+    const projectId = Object.prototype.hasOwnProperty.call(updates, "projectId")
+      ? updates.projectId
+      : existingTask.project;
 
-      const projectExists = await Project.exists({
-        _id: updates.projectId,
+    if (!isValidId(projectId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid project ID",
       });
-
-      if (!projectExists) {
-        return res.status(404).json({
-          success: false,
-          message: "Project not found",
-        });
-      }
-
-      updates.project = updates.projectId;
-      delete updates.projectId;
     }
 
-    // Retrieve the task's previous state
-    const existingTask = await Task.findById(req.params.id);
+    const project = await Project.findById(projectId);
 
-    if (!existingTask) {
+    if (!project) {
       return res.status(404).json({
         success: false,
-        message: "Task not found",
+        message: "Project not found",
       });
     }
+
+    const projectChanged =
+      project._id.toString() !== existingTask.project.toString();
+
+    // Moving a task to another project clears its previous
+    // assignment unless a new assignee is explicitly supplied.
+    let assignedTo = Object.prototype.hasOwnProperty.call(updates, "assignedTo")
+      ? updates.assignedTo
+      : projectChanged
+        ? null
+        : existingTask.assignedTo;
+
+    if (assignedTo !== null && assignedTo !== undefined) {
+      assignedTo = assignedTo.toString();
+    }
+
+    const validation = await validateAssignee(assignedTo, project);
+
+    if (!validation.valid) {
+      return res.status(validation.status).json({
+        success: false,
+        message: validation.message,
+      });
+    }
+
+    updates.project = project._id;
+    updates.assignedTo = validation.userId;
+    delete updates.projectId;
 
     const previousStatus = existingTask.status;
     const previousProjectId = existingTask.project;
 
-    const task = await Task.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
-      runValidators: true,
-    }).populate("project", "name status color");
+    Object.assign(existingTask, updates);
+    await existingTask.save();
 
-    if (!task) {
-      return res.status(404).json({
-        success: false,
-        message: "Task not found",
-      });
-    }
+    const task = await populateTask(Task.findById(existingTask._id));
 
     const isCompleted =
       previousStatus !== "completed" && task.status === "completed";
-
-    const projectName = task.project?.name || "Unknown project";
 
     await recordActivity({
       action: isCompleted ? "task-completed" : "task-updated",
@@ -274,8 +364,9 @@ const updateTask = async (req, res, next) => {
       metadata: {
         updatedFields: Object.keys(updates),
         previousStatus,
+        newStatus: task.status,
         currentStatus: task.status,
-        projectName,
+        assignedTo: validation.userId,
       },
     });
 
@@ -296,7 +387,7 @@ const updateTask = async (req, res, next) => {
   }
 };
 
-// @desc    Delete a task
+// @desc    Delete a task (admin only)
 // @route   DELETE /api/tasks/:id
 const deleteTask = async (req, res, next) => {
   try {
@@ -331,6 +422,11 @@ const deleteTask = async (req, res, next) => {
       entityId: taskId,
       entityName: taskTitle,
       project: projectId,
+      task: taskId,
+      metadata: {
+        previousStatus: task.status,
+        projectName: task.project?.name || "",
+      },
     });
 
     res.status(200).json({
@@ -342,10 +438,133 @@ const deleteTask = async (req, res, next) => {
   }
 };
 
+// @desc    Update task status with role-based permissions
+// @route   PATCH /api/tasks/:id/status
+const updateTaskStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!isValidId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid task ID",
+      });
+    }
+
+    const allowedStatuses = ["todo", "in-progress", "review", "completed"];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid task status",
+      });
+    }
+
+    const isAdmin = req.user.role === "admin";
+
+    const filter = { _id: id };
+
+    if (!isAdmin) {
+      filter.assignedTo = req.user._id;
+    }
+
+    const task = await Task.findOne(filter);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found or access denied",
+      });
+    }
+
+    const previousStatus = task.status;
+
+    if (!isAdmin) {
+      if (status === "completed") {
+        return res.status(403).json({
+          success: false,
+          message: "Only an admin can mark a task as completed",
+        });
+      }
+
+      const memberTransitions = {
+        todo: ["in-progress"],
+        "in-progress": ["review"],
+        review: [],
+        completed: [],
+      };
+
+      const allowedNextStatuses = memberTransitions[previousStatus] || [];
+
+      if (status !== previousStatus && !allowedNextStatuses.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot change task status from "${previousStatus}" to "${status}"`,
+        });
+      }
+    }
+
+    if (previousStatus === status) {
+      const populatedTask = await populateTask(Task.findById(task._id));
+
+      return res.status(200).json({
+        success: true,
+        message: "Task status is already up to date",
+        data: populatedTask,
+      });
+    }
+
+    task.status = status;
+    await task.save();
+
+    const populatedTask = await populateTask(Task.findById(task._id));
+
+    const isCompleted = status === "completed";
+
+    await recordActivity({
+      action: isCompleted ? "task-completed" : "task-status-changed",
+      description: isCompleted
+        ? `Completed task "${task.title}"`
+        : `Changed task "${task.title}" from "${previousStatus}" to "${status}"`,
+      entityType: "task",
+      entityId: task._id,
+      entityName: task.title,
+      project: task.project,
+      task: task._id,
+      actor: req.user._id,
+      actorName: req.user.name,
+      metadata: {
+        previousStatus,
+        newStatus: status,
+        currentStatus: status,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: isCompleted
+        ? "Task marked as completed successfully"
+        : "Task status updated successfully",
+      data: populatedTask,
+    });
+  } catch (error) {
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    next(error);
+  }
+};
+
 module.exports = {
   getTasks,
   getTask,
   createTask,
   updateTask,
+  updateTaskStatus,
   deleteTask,
 };

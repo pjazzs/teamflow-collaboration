@@ -1,10 +1,13 @@
 import {
+  Activity as ActivityIcon,
   CheckCircle2,
   CirclePlus,
+  Clock3,
   MessageCircle,
   Pencil,
+  RotateCcw,
+  Send,
   Trash2,
-  Activity as ActivityIcon,
 } from "lucide-react";
 
 const icons = {
@@ -13,10 +16,11 @@ const icons = {
   "project-deleted": Trash2,
   "task-created": CirclePlus,
   "task-updated": Pencil,
+  "task-status-changed": Clock3,
   "task-completed": CheckCircle2,
   "task-deleted": Trash2,
   "comment-created": MessageCircle,
-  "comment-deleted": MessageCircle,
+  "comment-deleted": Trash2,
 };
 
 const avatarColors = [
@@ -75,6 +79,27 @@ const getActivityContext = (item) => {
   return projectName || taskName || item.entityName || "Workspace";
 };
 
+const getActivityIcon = (item) => {
+  const previousStatus = item.metadata?.previousStatus;
+  const newStatus = item.metadata?.newStatus || item.metadata?.currentStatus;
+
+  if (item.action === "task-status-changed" || item.action === "task-updated") {
+    if (previousStatus === "review" && newStatus === "in-progress") {
+      return RotateCcw;
+    }
+
+    if (newStatus === "review") {
+      return Send;
+    }
+
+    if (newStatus === "in-progress" && previousStatus === "todo") {
+      return Clock3;
+    }
+  }
+
+  return icons[item.action] || ActivityIcon;
+};
+
 export default function ActivityFeed({
   activities = [],
   loading = false,
@@ -120,7 +145,7 @@ export default function ActivityFeed({
         {!loading &&
           !error &&
           activities.map((item, index) => {
-            const Icon = icons[item.action] || ActivityIcon;
+            const Icon = getActivityIcon(item);
             const actorName = item.actorName || "Team member";
             const context = getActivityContext(item);
 

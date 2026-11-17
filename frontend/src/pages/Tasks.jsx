@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   CalendarDays,
@@ -11,10 +10,12 @@ import {
   Plus,
   Search,
   Trash2,
+  UserRound,
 } from "lucide-react";
 
 import useTasks from "../hooks/useTasks";
 import useProjects from "../hooks/useProjects";
+import useAuth from "../context/useAuth";
 import TaskForm from "../components/tasks/TaskForm";
 
 const statusStyles = {
@@ -30,12 +31,11 @@ const priorityStyles = {
   high: "text-rose-600",
 };
 
-const formatLabel = (value = "") => {
-  return value
+const formatLabel = (value = "") =>
+  value
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-};
 
 const formatDate = (date) => {
   if (!date) return "No due date";
@@ -47,13 +47,26 @@ const formatDate = (date) => {
   });
 };
 
+const getInitials = (name = "") =>
+  name
+    .trim()
+    .split(/\s+/)
+    .map((word) => word[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
 export default function Tasks() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
   const {
     tasks,
     loading: tasksLoading,
     error: tasksError,
     createTask,
     updateTask,
+    updateTaskStatus,
     deleteTask,
   } = useTasks();
 
@@ -67,6 +80,7 @@ export default function Tasks() {
   const [projectFilter, setProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [assigneeFilter, setAssigneeFilter] = useState("all");
 
   const [showForm, setShowForm] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -74,10 +88,28 @@ export default function Tasks() {
   const [pageError, setPageError] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const requestedCreate = searchParams.get("create") === "task";
+  const [updatingStatusId, setUpdatingStatusId] = useState(null);
+
+  const requestedCreate = isAdmin && searchParams.get("create") === "task";
 
   const loading = tasksLoading || projectsLoading;
   const error = pageError || tasksError || projectsError;
+
+  const assignees = useMemo(() => {
+    const memberMap = new Map();
+
+    tasks.forEach((task) => {
+      const member = task.assignedTo;
+
+      if (member && typeof member === "object" && member._id) {
+        memberMap.set(member._id, member);
+      }
+    });
+
+    return Array.from(memberMap.values()).sort((a, b) =>
+      (a.name || "").localeCompare(b.name || ""),
+    );
+  }, [tasks]);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -96,11 +128,30 @@ export default function Tasks() {
       const matchesPriority =
         priorityFilter === "all" || task.priority === priorityFilter;
 
+      const assignedId = task.assignedTo?._id || task.assignedTo || "";
+
+      const matchesAssignee =
+        assigneeFilter === "all" ||
+        (assigneeFilter === "unassigned"
+          ? !assignedId
+          : assignedId === assigneeFilter);
+
       return (
-        matchesSearch && matchesProject && matchesStatus && matchesPriority
+        matchesSearch &&
+        matchesProject &&
+        matchesStatus &&
+        matchesPriority &&
+        matchesAssignee
       );
     });
-  }, [tasks, search, projectFilter, statusFilter, priorityFilter]);
+  }, [
+    tasks,
+    search,
+    projectFilter,
+    statusFilter,
+    priorityFilter,
+    assigneeFilter,
+  ]);
 
   const completedCount = tasks.filter(
     (task) => task.status === "completed",
@@ -112,13 +163,29 @@ export default function Tasks() {
 
   const pendingCount = tasks.filter((task) => task.status === "todo").length;
 
+  const clearCreateRequest = () => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("create");
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
   const openCreateForm = () => {
+    if (!isAdmin) return;
+
     clearCreateRequest();
     setSelectedTask(null);
     setPageError("");
     setShowForm(true);
   };
+
   const openEditForm = (task) => {
+    if (!isAdmin) return;
+
     setSelectedTask(task);
     setPageError("");
     setShowForm(true);
@@ -133,6 +200,13 @@ export default function Tasks() {
   };
 
   const handleSubmit = async (taskData) => {
+    if (!isAdmin) {
+      return {
+        success: false,
+        error: "Only admins can manage tasks.",
+      };
+    }
+
     setSubmitting(true);
     setPageError("");
 
@@ -152,6 +226,8 @@ export default function Tasks() {
   };
 
   const handleDelete = async (task) => {
+    if (!isAdmin) return;
+
     const confirmed = window.confirm(
       `Are you sure you want to delete "${task.title}"?`,
     );
@@ -168,24 +244,28 @@ export default function Tasks() {
   };
 
   const handleStatusChange = async (task, status) => {
+    if (updatingStatusId) return;
+
     setPageError("");
+    setUpdatingStatusId(task._id);
 
-    const result = await updateTask(task._id, { status });
+    try {
+      const result = await updateTaskStatus(task._id, status);
 
-    if (!result.success) {
-      setPageError(result.error || "Unable to update task status.");
+      if (!result.success) {
+        setPageError(result.error || "Unable to update task status.");
+      }
+    } finally {
+      setUpdatingStatusId(null);
     }
   };
-  const clearCreateRequest = () => {
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        next.delete("create");
-        return next;
-      },
-      { replace: true },
-    );
-  };
+
+  const hasActiveFilters =
+    search ||
+    projectFilter !== "all" ||
+    statusFilter !== "all" ||
+    priorityFilter !== "all" ||
+    (isAdmin && assigneeFilter !== "all");
 
   return (
     <div className="space-y-7">
@@ -197,23 +277,27 @@ export default function Tasks() {
           </p>
 
           <h1 className="heading-font mt-1 text-[26px] font-extrabold tracking-tight text-slate-900 sm:text-[30px]">
-            Tasks
+            {isAdmin ? "Tasks" : "My tasks"}
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Manage and track tasks across your projects.
+            {isAdmin
+              ? "Manage assignments and track tasks across your projects."
+              : "View the tasks assigned to you."}
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={openCreateForm}
-          disabled={projects.length === 0 || projectsLoading}
-          className="flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-xs font-semibold text-white shadow-md shadow-violet-200 transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Plus size={16} />
-          Create task
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={openCreateForm}
+            disabled={projects.length === 0 || projectsLoading}
+            className="flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-xs font-semibold text-white shadow-md shadow-violet-200 transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus size={16} />
+            Create task
+          </button>
+        )}
       </section>
 
       {/* Statistics */}
@@ -254,7 +338,11 @@ export default function Tasks() {
 
       {/* Filters */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft sm:p-5">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div
+          className={`grid gap-3 sm:grid-cols-2 ${
+            isAdmin ? "xl:grid-cols-5" : "xl:grid-cols-4"
+          }`}
+        >
           <div className="relative">
             <Search
               size={16}
@@ -273,7 +361,7 @@ export default function Tasks() {
           <select
             value={projectFilter}
             onChange={(event) => setProjectFilter(event.target.value)}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-600 outline-none focus:border-violet-400"
+            className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-600 outline-none focus:border-violet-400"
           >
             <option value="all">All projects</option>
 
@@ -287,7 +375,7 @@ export default function Tasks() {
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-600 outline-none focus:border-violet-400"
+            className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-600 outline-none focus:border-violet-400"
           >
             <option value="all">All statuses</option>
             <option value="todo">To do</option>
@@ -299,13 +387,31 @@ export default function Tasks() {
           <select
             value={priorityFilter}
             onChange={(event) => setPriorityFilter(event.target.value)}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-600 outline-none focus:border-violet-400"
+            className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-600 outline-none focus:border-violet-400"
           >
             <option value="all">All priorities</option>
             <option value="high">High priority</option>
             <option value="medium">Medium priority</option>
             <option value="low">Low priority</option>
           </select>
+
+          {isAdmin && (
+            <select
+              value={assigneeFilter}
+              onChange={(event) => setAssigneeFilter(event.target.value)}
+              aria-label="Filter by assignee"
+              className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-600 outline-none focus:border-violet-400"
+            >
+              <option value="all">All assignees</option>
+              <option value="unassigned">Unassigned</option>
+
+              {assignees.map((member) => (
+                <option key={member._id} value={member._id}>
+                  {member.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </section>
 
@@ -325,10 +431,14 @@ export default function Tasks() {
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-soft">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div>
-              <h2 className="text-sm font-bold text-slate-800">All tasks</h2>
+              <h2 className="text-sm font-bold text-slate-800">
+                {isAdmin ? "All tasks" : "My assigned tasks"}
+              </h2>
 
               <p className="mt-0.5 text-[11px] text-slate-400">
-                Manage your workspace tasks
+                {isAdmin
+                  ? "Manage your workspace tasks"
+                  : "Tasks assigned to your account"}
               </p>
             </div>
 
@@ -338,105 +448,195 @@ export default function Tasks() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-212.5 text-left">
+            <table className="w-full min-w-225 text-left">
               <thead>
                 <tr className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                   <th className="px-5 py-3">Task</th>
                   <th className="px-4 py-3">Project</th>
+                  <th className="px-4 py-3">Assigned to</th>
                   <th className="px-4 py-3">Due date</th>
                   <th className="px-4 py-3">Priority</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Actions</th>
+                  {isAdmin && <th className="px-4 py-3">Actions</th>}
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-                {filteredTasks.map((task) => (
-                  <tr
-                    key={task._id}
-                    className="transition hover:bg-slate-50/60"
-                  >
-                    <td className="px-5 py-4">
-                      <div>
-                        <Link
-                          to={`/tasks/${task._id}`}
-                          className="text-xs font-semibold text-slate-700 transition hover:text-violet-600"
-                        >
-                          {task.title}
-                        </Link>
+                {filteredTasks.map((task) => {
+                  const assignee =
+                    task.assignedTo && typeof task.assignedTo === "object"
+                      ? task.assignedTo
+                      : null;
 
-                        {task.description && (
-                          <p className="mt-1 max-w-55 truncate text-[10px] text-slate-400">
-                            {task.description}
-                          </p>
+                  return (
+                    <tr
+                      key={task._id}
+                      className="transition hover:bg-slate-50/60"
+                    >
+                      <td className="px-5 py-4">
+                        <div>
+                          <Link
+                            to={`/tasks/${task._id}`}
+                            className="text-xs font-semibold text-slate-700 transition hover:text-violet-600"
+                          >
+                            {task.title}
+                          </Link>
+
+                          {task.description && (
+                            <p className="mt-1 max-w-55 truncate text-[10px] text-slate-400">
+                              {task.description}
+                            </p>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <span className="text-[11px] text-slate-500">
+                          {task.project?.name || "Unknown project"}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-4">
+                        {assignee ? (
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">
+                              {getInitials(assignee.name)}
+                            </span>
+
+                            <div className="min-w-0">
+                              <p className="max-w-32 truncate text-[11px] font-semibold text-slate-700">
+                                {assignee.name}
+                              </p>
+
+                              <p className="max-w-32 truncate text-[10px] text-slate-400">
+                                {assignee.email}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                            <UserRound size={13} />
+                            Unassigned
+                          </span>
                         )}
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="px-4 py-4">
-                      <span className="text-[11px] text-slate-500">
-                        {task.project?.name || "Unknown project"}
-                      </span>
-                    </td>
+                      <td className="px-4 py-4">
+                        <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-slate-500">
+                          <CalendarDays size={12} />
+                          {formatDate(task.dueDate)}
+                        </span>
+                      </td>
 
-                    <td className="px-4 py-4">
-                      <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-slate-500">
-                        <CalendarDays size={12} />
-                        {formatDate(task.dueDate)}
-                      </span>
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <span
-                        className={`text-[11px] font-semibold ${
-                          priorityStyles[task.priority] || "text-slate-500"
-                        }`}
-                      >
-                        ● {formatLabel(task.priority)}
-                      </span>
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <select
-                        aria-label={`Change status for ${task.title}`}
-                        value={task.status}
-                        onChange={(event) =>
-                          handleStatusChange(task, event.target.value)
-                        }
-                        className={`rounded-md border-0 px-2 py-1 text-[10px] font-semibold outline-none ${
-                          statusStyles[task.status] || statusStyles.todo
-                        }`}
-                      >
-                        <option value="todo">To do</option>
-                        <option value="in-progress">In progress</option>
-                        <option value="review">In review</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openEditForm(task)}
-                          aria-label={`Edit ${task.title}`}
-                          className="rounded-lg p-2 text-slate-400 transition hover:bg-violet-50 hover:text-violet-600"
+                      <td className="px-4 py-4">
+                        <span
+                          className={`text-[11px] font-semibold ${
+                            priorityStyles[task.priority] || "text-slate-500"
+                          }`}
                         >
-                          <Edit3 size={15} />
-                        </button>
+                          ● {formatLabel(task.priority)}
+                        </span>
+                      </td>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(task)}
-                          aria-label={`Delete ${task.title}`}
-                          className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="px-4 py-4">
+                        {isAdmin ? (
+                          <select
+                            aria-label={`Change status for ${task.title}`}
+                            value={task.status}
+                            disabled={updatingStatusId === task._id}
+                            onChange={(event) =>
+                              handleStatusChange(task, event.target.value)
+                            }
+                            className={`rounded-md border-0 px-2 py-1 text-[10px] font-semibold outline-none disabled:cursor-wait disabled:opacity-60 ${
+                              statusStyles[task.status] || statusStyles.todo
+                            }`}
+                          >
+                            <option value="todo">To do</option>
+                            <option value="in-progress">In progress</option>
+                            <option value="review">In review</option>
+                            <option value="completed">Completed</option>
+                          </select>
+                        ) : (
+                          <div className="flex flex-col items-start gap-2">
+                            <span
+                              className={`rounded-md px-2 py-1 text-[10px] font-semibold ${
+                                statusStyles[task.status] || statusStyles.todo
+                              }`}
+                            >
+                              {formatLabel(task.status)}
+                            </span>
+
+                            {task.status === "todo" && (
+                              <button
+                                type="button"
+                                disabled={updatingStatusId === task._id}
+                                onClick={() =>
+                                  handleStatusChange(task, "in-progress")
+                                }
+                                className="whitespace-nowrap rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                {updatingStatusId === task._id
+                                  ? "Updating..."
+                                  : "Start task"}
+                              </button>
+                            )}
+
+                            {task.status === "in-progress" && (
+                              <button
+                                type="button"
+                                disabled={updatingStatusId === task._id}
+                                onClick={() =>
+                                  handleStatusChange(task, "review")
+                                }
+                                className="whitespace-nowrap rounded-lg bg-amber-500 px-2.5 py-1.5 text-[10px] font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+                              >
+                                {updatingStatusId === task._id
+                                  ? "Submitting..."
+                                  : "Submit for review"}
+                              </button>
+                            )}
+
+                            {task.status === "review" && (
+                              <span className="text-[10px] font-medium text-amber-600">
+                                Awaiting admin approval
+                              </span>
+                            )}
+
+                            {task.status === "completed" && (
+                              <span className="text-[10px] font-medium text-emerald-600">
+                                Approved by admin
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      {isAdmin && (
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEditForm(task)}
+                              aria-label={`Edit ${task.title}`}
+                              className="rounded-lg p-2 text-slate-400 transition hover:bg-violet-50 hover:text-violet-600"
+                            >
+                              <Edit3 size={15} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(task)}
+                              aria-label={`Delete ${task.title}`}
+                              className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -448,42 +648,32 @@ export default function Tasks() {
           </div>
 
           <h2 className="mt-4 text-sm font-bold text-slate-800">
-            {search ||
-            projectFilter !== "all" ||
-            statusFilter !== "all" ||
-            priorityFilter !== "all"
-              ? "No matching tasks"
-              : "No tasks yet"}
+            {hasActiveFilters ? "No matching tasks" : "No tasks yet"}
           </h2>
 
           <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-slate-400">
-            {search ||
-            projectFilter !== "all" ||
-            statusFilter !== "all" ||
-            priorityFilter !== "all"
+            {hasActiveFilters
               ? "Try adjusting your search or filters."
-              : "Create your first task to start tracking your team's work."}
+              : isAdmin
+                ? "Create your first task to start tracking your team's work."
+                : "No tasks have been assigned to you yet."}
           </p>
 
-          {!search &&
-            projectFilter === "all" &&
-            statusFilter === "all" &&
-            priorityFilter === "all" &&
-            projects.length > 0 && (
-              <button
-                type="button"
-                onClick={openCreateForm}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-700"
-              >
-                <Plus size={15} />
-                Create task
-              </button>
-            )}
+          {isAdmin && !hasActiveFilters && projects.length > 0 && (
+            <button
+              type="button"
+              onClick={openCreateForm}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-700"
+            >
+              <Plus size={15} />
+              Create task
+            </button>
+          )}
         </section>
       )}
 
-      {/* Create/Edit modal */}
-      {(showForm || (requestedCreate && projects.length > 0)) && (
+      {/* Create/Edit modal - admin only */}
+      {isAdmin && (showForm || (requestedCreate && projects.length > 0)) && (
         <TaskForm
           key={selectedTask?._id || "new-task"}
           task={selectedTask}

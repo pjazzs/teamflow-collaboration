@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const Activity = require("../models/Activity");
+const Project = require("../models/Project");
+const Task = require("../models/Task");
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -35,6 +37,7 @@ const getActivities = async (req, res, next) => {
     }
 
     const limit = Math.min(requestedLimit, 100);
+    const isAdmin = req.user.role === "admin";
 
     const filter = {};
 
@@ -44,6 +47,62 @@ const getActivities = async (req, res, next) => {
 
     if (taskId) {
       filter.task = taskId;
+    }
+
+    if (!isAdmin) {
+      const userId = req.user._id;
+
+      // Get projects where the member currently belongs.
+      const accessibleProjectIds = await Project.find({
+        members: userId,
+      }).distinct("_id");
+
+      // Get tasks assigned to the member within
+      // projects they currently belong to.
+      const accessibleTaskIds = await Task.find({
+        assignedTo: userId,
+        project: { $in: accessibleProjectIds },
+      }).distinct("_id");
+
+      // A requested project must belong to the member.
+      if (
+        projectId &&
+        !accessibleProjectIds.some(
+          (id) => id.toString() === projectId.toString(),
+        )
+      ) {
+        return res.status(404).json({
+          success: false,
+          message: "Project not found or access denied",
+        });
+      }
+
+      // A requested task must be assigned to the member
+      // and belong to an accessible project.
+      if (
+        taskId &&
+        !accessibleTaskIds.some((id) => id.toString() === taskId.toString())
+      ) {
+        return res.status(404).json({
+          success: false,
+          message: "Task not found or access denied",
+        });
+      }
+
+      // Project-level activities have no task reference.
+      // Task-level activities must reference an assigned task.
+      //
+      // Using $or ensures that project membership alone
+      // does not expose another member's task activities.
+      filter.$or = [
+        {
+          project: { $in: accessibleProjectIds },
+          task: null,
+        },
+        {
+          task: { $in: accessibleTaskIds },
+        },
+      ];
     }
 
     const activities = await Activity.find(filter)

@@ -6,6 +6,7 @@ import {
   ListTodo,
   Plus,
 } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 import StatCard from "../components/dashboard/StatCard";
 import ProjectCard from "../components/dashboard/ProjectCard";
@@ -15,8 +16,27 @@ import ActivityFeed from "../components/dashboard/ActivityFeed";
 import useProjects from "../hooks/useProjects";
 import useTasks from "../hooks/useTasks";
 import useActivities from "../hooks/useActivities";
+import useAuth from "../context/useAuth";
+
+const getGreeting = () => {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+
+  return "Good evening";
+};
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const isAdmin = user?.role === "admin";
+
+  const firstName = user?.name?.trim().split(/\s+/)[0] || "there";
+
+  const greeting = getGreeting();
+
   const {
     projects,
     loading: projectsLoading,
@@ -40,6 +60,10 @@ export default function Dashboard() {
 
   const inProgressTasks = tasks.filter(
     (task) => task.status === "in-progress",
+  ).length;
+
+  const completedProjects = projects.filter(
+    (project) => project.status === "completed",
   ).length;
 
   const activeProjects = projects.filter(
@@ -78,22 +102,30 @@ export default function Dashboard() {
     <div className="w-full min-w-0 space-y-7">
       {/* Welcome section */}
       <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-medium text-violet-600">{formattedDate}</p>
 
-          <h1 className="heading-font mt-1 text-[26px] font-extrabold tracking-tight text-slate-900 sm:text-[30px]">
-            Good evening, Progress ✦
+          <h1 className="heading-font mt-1 wrap-break-word text-[26px] font-extrabold tracking-tight text-slate-900 sm:text-[30px]">
+            {greeting}, {firstName} ✦
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Here's what's happening with your team today.
+            {isAdmin
+              ? "Here's what's happening with your team today."
+              : "Here's what's happening with your projects and tasks today."}
           </p>
         </div>
 
-        <button className="flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-xs font-semibold text-white shadow-md shadow-violet-200 transition hover:bg-violet-700">
-          <Plus size={16} />
-          Create project
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => navigate("/projects")}
+            className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-xs font-semibold text-white shadow-md shadow-violet-200 transition hover:bg-violet-700"
+          >
+            <Plus size={16} />
+            Create project
+          </button>
+        )}
       </section>
 
       {/* Loading and error states */}
@@ -116,17 +148,18 @@ export default function Dashboard() {
             <StatCard
               label="Total projects"
               value={projects.length}
-              detail="Projects in your workspace"
+              detail={
+                isAdmin
+                  ? "Projects in your workspace"
+                  : "Projects assigned to you"
+              }
               icon={BriefcaseBusiness}
               tone="violet"
             />
 
             <StatCard
               label="Completed projects"
-              value={
-                projects.filter((project) => project.status === "completed")
-                  .length
-              }
+              value={completedProjects}
               detail="Successfully completed"
               icon={CheckCircle2}
               tone="emerald"
@@ -143,7 +176,7 @@ export default function Dashboard() {
             <StatCard
               label="Tasks in progress"
               value={inProgressTasks}
-              detail="Across all projects"
+              detail={isAdmin ? "Across all projects" : "Your assigned tasks"}
               icon={ListTodo}
               tone="orange"
             />
@@ -151,21 +184,26 @@ export default function Dashboard() {
 
           {/* Active projects */}
           <section>
-            <div className="mb-4 flex items-end justify-between">
-              <div>
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div className="min-w-0">
                 <h2 className="heading-font text-base font-extrabold text-slate-900">
                   Active projects
                 </h2>
 
                 <p className="mt-0.5 text-[11px] text-slate-400">
-                  A snapshot of what your team is working on
+                  {isAdmin
+                    ? "A snapshot of what your team is working on"
+                    : "A snapshot of your assigned projects"}
                 </p>
               </div>
 
-              <button className="flex items-center gap-1 text-[11px] font-semibold text-violet-600">
+              <Link
+                to="/projects"
+                className="flex shrink-0 items-center gap-1 text-[11px] font-semibold text-violet-600 hover:text-violet-700"
+              >
                 All projects
                 <ArrowRight size={13} />
-              </button>
+              </Link>
             </div>
 
             {projectCards.length > 0 ? (
@@ -186,7 +224,9 @@ export default function Dashboard() {
                 </p>
 
                 <p className="mt-1 text-xs text-slate-400">
-                  Create your first project to get started.
+                  {isAdmin
+                    ? "Create your first project to get started."
+                    : "Your assigned projects will appear here."}
                 </p>
               </div>
             )}
@@ -215,15 +255,19 @@ export default function Dashboard() {
               </p>
 
               <p className="mt-1 text-xs text-violet-100">
-                Your team has completed {completedTasks} tasks so far. Keep the
-                momentum going.
+                {isAdmin
+                  ? `Your team has completed ${completedTasks} tasks so far. Keep the momentum going.`
+                  : `You've completed ${completedTasks} assigned tasks so far. Keep the momentum going.`}
               </p>
             </div>
 
-            <button className="flex items-center gap-2 self-start rounded-lg bg-white/15 px-3 py-2 text-[11px] font-semibold transition hover:bg-white/25 sm:self-auto">
+            <Link
+              to="/tasks"
+              className="flex items-center gap-2 self-start rounded-lg bg-white/15 px-3 py-2 text-[11px] font-semibold transition hover:bg-white/25 sm:self-auto"
+            >
               View team progress
               <ArrowUpRight size={14} />
-            </button>
+            </Link>
           </section>
         </>
       )}

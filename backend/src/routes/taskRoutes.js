@@ -6,17 +6,31 @@ const {
   createTask,
   updateTask,
   deleteTask,
+  updateTaskStatus,
 } = require("../controllers/taskController");
 
-const { protect } = require("../middleware/authMiddleware");
+const { protect, authorizeRoles } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// Require authentication for every task endpoint
+// All task routes require authentication
 router.use(protect);
 
-router.route("/").get(getTasks).post(createTask);
+// Get tasks accessible to the authenticated user
+router.get("/", getTasks);
 
-router.route("/:id").get(getTask).patch(updateTask).delete(deleteTask);
+// Create task (admin only)
+router.post("/", authorizeRoles("admin"), createTask);
+
+router.patch("/:id/status", updateTaskStatus);
+
+// Get a single task
+router.get("/:id", getTask);
+
+// Update task details (admin only)
+router.patch("/:id", authorizeRoles("admin"), updateTask);
+
+// Delete task (admin only)
+router.delete("/:id", authorizeRoles("admin"), deleteTask);
 
 module.exports = router;
